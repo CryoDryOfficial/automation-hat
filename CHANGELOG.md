@@ -1,3 +1,8 @@
+1.0.1
+-----
+
+* Tweak: Disabling lights before calling any automationhat function will now prevent agressive gpio configuration
+
 1.0.0
 -----
 
