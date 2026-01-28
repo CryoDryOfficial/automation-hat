@@ -39,6 +39,7 @@ _is_setup = False
 _t_update_lights = None
 _ads1015 = None
 _gpiochip = None
+_lights_enabled = True
 
 
 class SNLight(object):
@@ -122,7 +123,8 @@ class AnalogInput(object):
 
     def _update(self):
         self.setup()
-        self.value = _ads1015.get_voltage("in{}/gnd".format(self.channel)) / 3.3
+        self.value = _ads1015.get_voltage(
+            "in{}/gnd".format(self.channel)) / 3.3
 
         if self._en_auto_lights:
             adc = self.value
@@ -184,7 +186,8 @@ class Input(Pin):
         self.pin = _gpiochip.line_offset_from_id(self.pin)
 
         self._gpioline = _gpiochip.request_lines(consumer="AH", config={
-            self.pin: gpiod.LineSettings(direction=Direction.INPUT, bias=Bias.DISABLED)
+            self.pin: gpiod.LineSettings(
+                direction=Direction.INPUT, bias=Bias.DISABLED)
         })
 
         self._is_setup = True
@@ -219,7 +222,8 @@ class Output(Pin):
         self.pin = _gpiochip.line_offset_from_id(self.pin)
 
         self._gpioline = _gpiochip.request_lines(consumer="AH", config={
-            self.pin: gpiod.LineSettings(direction=Direction.OUTPUT, bias=Bias.DISABLED, output_value=Value.INACTIVE)
+            self.pin: gpiod.LineSettings(
+                direction=Direction.OUTPUT, bias=Bias.DISABLED, output_value=Value.INACTIVE)
         })
 
         self._is_setup = True
@@ -236,7 +240,8 @@ class Output(Pin):
         :param value: Value to write, either 1 for HIGH or 0 for LOW
         """
         self.setup()
-        self._gpioline.set_value(self.pin, Value.ACTIVE if value else Value.INACTIVE)
+        self._gpioline.set_value(
+            self.pin, Value.ACTIVE if value else Value.INACTIVE)
         if self._en_auto_lights:
             self.light.write(1 if value else 0)
 
@@ -279,7 +284,8 @@ class Relay(Output):
             self.pin = RELAY_3
 
         self._gpioline = _gpiochip.request_lines(consumer="AH", config={
-            self.pin: gpiod.LineSettings(direction=Direction.OUTPUT, bias=Bias.DISABLED, output_value=Value.INACTIVE)
+            self.pin: gpiod.LineSettings(
+                direction=Direction.OUTPUT, bias=Bias.DISABLED, output_value=Value.INACTIVE)
         })
 
         self._is_setup = True
@@ -293,9 +299,11 @@ class Relay(Output):
         self.setup()
 
         if is_automation_phat() and self.name in ["two", "three"]:
-            warnings.warn("Relay '{}' is not supported on Automation pHAT".format(self.name))
+            warnings.warn(
+                "Relay '{}' is not supported on Automation pHAT".format(self.name))
 
-        self._gpioline.set_value(self.pin, Value.ACTIVE if value else Value.INACTIVE)
+        self._gpioline.set_value(
+            self.pin, Value.ACTIVE if value else Value.INACTIVE)
 
         if self._en_auto_lights:
             if value:
@@ -330,30 +338,32 @@ def is_automation_phat():
 
 
 def enable_auto_lights(state):
-    global _t_update_lights
+    global _t_update_lights, _lights_enabled
+
+    _lights_enabled = state
 
     setup()
 
     if lights is None:
         return
 
-    input.auto_light(state)
-    output.auto_light(state)
-    relay.auto_light(state)
-    analog.auto_light(state)
+    input.auto_light(_lights_enabled)
+    output.auto_light(_lights_enabled)
+    relay.auto_light(_lights_enabled)
+    analog.auto_light(_lights_enabled)
 
-    if state and _t_update_lights is None:
+    if _lights_enabled and _t_update_lights is None:
         _t_update_lights = AsyncWorker(_update_lights)
         _t_update_lights.start()
 
-    if not state and _t_update_lights is not None:
+    if not _lights_enabled and _t_update_lights is not None:
         _t_update_lights.stop()
         _t_update_lights.join()
         _t_update_lights = None
 
 
 def setup():
-    global automation_hat, automation_phat, lights, _ads1015, _is_setup, _t_update_lights, _gpiochip
+    global automation_hat, automation_phat, lights, _ads1015, _is_setup, _t_update_lights, _gpiochip, _lights_enabled
 
     if _is_setup:
         return True
@@ -375,7 +385,6 @@ def setup():
 
     _ads1015.set_programmable_gain(4.096)
 
-
     try:
         lights = sn3218.SN3218()
     except (IOError, OSError):
@@ -386,8 +395,9 @@ def setup():
         lights.enable_leds(0b111111111111111111)
         automation_hat = True
         automation_phat = False
-        _t_update_lights = AsyncWorker(_update_lights)
-        _t_update_lights.start()
+        if _lights_enabled:
+            _t_update_lights = AsyncWorker(_update_lights)
+            _t_update_lights.start()
 
     atexit.register(_exit)
 
@@ -427,4 +437,3 @@ light = ObjectCollection()
 light._add(power=SNLight(17))
 light._add(comms=SNLight(16))
 light._add(warn=SNLight(15))
-
